@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>森屿 | 剪辑工作台 V22 (Better UI)</title>
+    <script src="https://cdn.staticfile.net/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* --- 核心变量 --- */
+        :root {
+            --bg: #0f172a; 
+            --card-bg: #1e293b; 
+            --text: #f1f5f9; 
+            --text-dim: #94a3b8;
+            --primary: #6366f1; 
+            --primary-hover: #818cf8;
+            --success: #10b981; 
+            --warning: #f59e0b; 
+            --danger: #ef4444; 
+            --reimb: #22d3ee;
+            --sidebar-width: 340px;
+            
+            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* --- 基础样式 --- */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; outline: none; }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; 
+        }
+
+        /* --- 动画定义 --- */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(15px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; } to { opacity: 1; }
+        }
+
+        /* --- 布局框架 --- */
+        .app-container { display: flex; width: 100%; height: 100%; position: relative; }
+        
+        .mobile-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 40;
+            opacity: 0; pointer-events: none; transition: 0.3s; backdrop-filter: blur(4px);
+        }
+        .mobile-overlay.show { opacity: 1; pointer-events: auto; }
+
+        .mobile-header {
+            display: none; height: 60px; align-items: center; padding: 0 20px;
+            background: rgba(15, 23, 42, 0.9); border-bottom: 1px solid rgba(255,255,255,0.05);
+            position: fixed; top: 0; left: 0; right: 0; z-index: 30; justify-content: space-between;
+            backdrop-filter: blur(10px);
+        }
+        .menu-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 5px; }
+
+        /* --- 侧边栏 --- */
+        aside { 
+            width: var(--sidebar-width); background: rgba(15, 23, 42, 0.6); 
+            border-right: 1px solid rgba(255,255,255,0.04); 
+            display: flex; flex-direction: column; padding: 28px; flex-shrink: 0; z-index: 50; 
+            transition: transform 0.4s var(--ease-spring);
+            backdrop-filter: blur(20px);
+        }
+
+        .brand { 
+            font-size: 26px; font-weight: 900; color: white; margin-bottom: 30px; 
+            display: flex; align-items: center; gap: 12px; letter-spacing: 1px; user-select: none;
+        }
+        
+        .stat-box { 
+            background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(99,102,241,0.02)); 
+            border: 1px solid rgba(99,102,241,0.3); padding: 24px; border-radius: 20px; margin-bottom: 24px; 
+            transition: transform 0.3s var(--ease-spring), box-shadow 0.3s ease;
+            position: relative; overflow: hidden;
+        }
+        .stat-box:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 10px 30px -10px rgba(99,102,241,0.4); }
+        .stat-label { font-size: 13px; color: #a5b4fc; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display:flex; align-items:center; gap:6px;}
+        .stat-value { font-size: 42px; font-weight: 800; margin-top: 6px; color: white; letter-spacing: -1.5px; text-shadow: 0 4px 20px rgba(99,102,241,0.5); font-family: ui-monospace, SFMono-Regular, monospace; }
+
+        .group-title { font-size: 12px; font-weight: 800; color: #475569; margin: 24px 0 12px 6px; text-transform: uppercase; letter-spacing: 1.5px; }
+
+        /* === 时间筛选器样式 === */
+        .time-filter-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        .time-select-wrapper { 
+            position: relative; flex: 1; 
+            background: rgba(255,255,255,0.03); border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05); transition: 0.3s;
+        }
+        .time-select-wrapper:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.1); }
+        .time-select {
+            width: 100%; appearance: none; background: transparent; border: none;
+            color: #cbd5e1; padding: 10px 12px; font-size: 13px; font-weight: 600;
+            cursor: pointer; outline: none;
+        }
+        .time-select option { background: #1e293b; color: white; }
+        /* 下拉箭头 */
+        .time-select-wrapper::after {
+            content: '▼'; font-size: 8px; color: #64748b; 
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none;
+        }
+
+
+        .nav-btn { 
+            width: 100%; border: none; background: transparent; color: var(--text-dim); padding: 12px 16px; 
+            border-radius: 14px; cursor: pointer; text-align: left; 
+            transition: all 0.3s ease; 
+            display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; margin-bottom: 4px;
+            border: 1px solid transparent; position: relative; overflow: visible;
+        }
+        
+        .nav-btn:hover { background: rgba(255,255,255,0.03); color: white; padding-left: 20px; }
+        
+        .nav-btn[style*="--theme-color"]:hover,
+        .nav-btn.active[style*="--theme-color"] {
+            border-color: var(--theme-color);
+            box-shadow: 
+                0 0 15px -2px color-mix(in srgb, var(--theme-color), transparent 40%);
+            background: linear-gradient(90deg, color-mix(in srgb, var(--theme-color), transparent 92%), transparent);
+            color: white;
+            padding-left: 20px;
+        }
+
+        .nav-btn.active { 
+            background: rgba(255,255,255,0.06); color: white; border-color: rgba(255,255,255,0.08); 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding-left: 20px;
+        }
+        
+        .nav-btn.active::before { display: none; }
+
+        .nav-left { display: flex; align-items: center; gap: 12px; z-index: 2; }
+        .nav-icon { width: 18px; height: 18px; fill: currentColor; opacity: 0.7; transition: 0.2s; }
+        .nav-btn:hover .nav-icon, .nav-btn.active .nav-icon { opacity: 1; transform: scale(1.1); }
+
+        .badge-group { text-align: right; display: flex; align-items: center; gap: 10px; z-index: 2; }
+        .badge-money { font-size: 14px; font-weight: 600; color: #64748b; font-family: ui-monospace, SFMono-Regular, monospace; }
+        .nav-btn.active .badge-money { color: #cbd5e1; }
+        .badge-count { 
+            font-size: 12px; font-weight: 800; color: white; background: rgba(255,255,255,0.08); 
+            padding: 3px 9px; border-radius: 20px; min-width: 30px; text-align: center;
+        }
+        .nav-btn.active .badge-count { background: var(--primary); }
+        .nav-btn.active[style*="--theme-color"] .badge-count { background: var(--theme-color); color: #000; }
+
+        .client-list-container { flex: 1; overflow-y: auto; padding-right: 4px; margin-bottom: 20px; }
+        .client-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; opacity: 0.8; }
+
+        .aside-footer { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+        .btn-footer {
+            width: 100%; padding: 14px; border-radius: 14px; cursor: pointer; font-weight: 700; font-size: 14px;
+            display: flex; align-items: center; justify-content: center; gap: 8px; 
+            transition: transform 0.2s var(--ease-spring), background 0.2s;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .btn-footer:hover { transform: translateY(-2px); }
+        .btn-footer:active { transform: scale(0.96); }
+        .btn-export { background: rgba(30,41,59,0.5); color: #cbd5e1; }
+        .btn-save { background: rgba(5, 150, 105, 0.15); border-color: rgba(5, 150, 105, 0.3); color: #34d399; }
+
+        /* --- 主内容区 --- */
+        main { flex: 1; padding: 40px 48px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
+
+        .header-actions {
+            display: flex; gap: 12px;
+        }
+        .btn-header-action {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+            color: #94a3b8; padding: 8px 16px; border-radius: 12px;
+            cursor: pointer; font-weight: 600; font-size: 13px;
+            transition: 0.2s var(--ease-out); display: flex; align-items: center; gap: 6px;
+        }
+        .btn-header-action:hover { background: rgba(255,255,255,0.1); color: white; border-color: rgba(255,255,255,0.2); }
+        .btn-header-action:active { transform: scale(0.96); }
+
+        .project-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); 
+            grid-auto-rows: 560px; /* 强制所有行高度统一 */
+            gap: 28px; padding-bottom: 150px; 
+        }
+        
+        .new-project-card {
+            border: 2px dashed rgba(255,255,255,0.1); border-radius: 28px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.4s var(--ease-spring); 
+            background: rgba(255,255,255,0.01); 
+            height: 100%; 
+        }
+        .new-project-card:hover { border-color: var(--primary); background: rgba(99,102,241,0.04); transform: translateY(-6px); }
+        .new-project-card:active { transform: scale(0.96); }
+        
+        .new-project-content {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+        }
+
+        .new-icon { 
+            font-size: 40px; color: var(--primary);
+            width: 70px; height: 70px; border-radius: 50%; background: rgba(99,102,241,0.1);
+            display: flex; justify-content: center; align-items: center;
+            transition: transform 0.6s var(--ease-spring), background 0.3s;
+            line-height: 0;
+        }
+        .new-icon svg { pointer-events: none; }
+        .new-project-card:hover .new-icon { 
+            transform: rotate(90deg) scale(1.15); background: var(--primary); color: white;
+            box-shadow: 0 10px 30px rgba(99,102,241,0.4);
+        }
+        .new-text { font-size: 16px; font-weight: 700; color: var(--text-dim); transition: 0.3s; }
+        .new-project-card:hover .new-text { color: white; }
+
+        /* --- 项目卡片 --- */
+        .card { 
+            border-radius: 28px; padding: 28px; position: relative; 
+            transition: transform 0.3s var(--ease-spring), box-shadow 0.3s ease, border-color 0.3s;
+            display: flex; flex-direction: column; 
+            background: linear-gradient(160deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.95) 100%);
+            border: 1px solid rgba(255,255,255,0.03); border-top: 1px solid rgba(255,255,255,0.08);
+            transform-origin: center center; overflow: visible; will-change: transform;
+            height: 100%; 
+            justify-content: space-between;
+        }
+        
+        .card[style*="--theme-color"] {
+            background: linear-gradient(160deg, color-mix(in srgb, var(--theme-color), transparent 90%) 0%, rgba(15,23,42,0.98) 100%);
+            border-top-color: color-mix(in srgb, var(--theme-color), transparent 70%);
+        }
+
+        /* --- 修改：降低光效 --- */
+        .card:hover { 
+            transform: translateY(-8px) scale(1.01); 
+            z-index: 5; 
+            /* 降低了阴影的扩散半径和不透明度，使效果更柔和 */
+            box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5), 0 0 15px rgba(255,255,255,0.03);
+            border-color: rgba(255,255,255,0.2);
+        }
+        
+        .card[style*="--theme-color"]:hover {
+            /* 同样降低了有色光晕的强度，增加transparent比例 */
+            box-shadow: 
+                0 20px 45px -10px rgba(0,0,0,0.7), 
+                0 0 30px -5px color-mix(in srgb, var(--theme-color), transparent 65%);
+            border-color: var(--theme-color);
+        }
+
+        .card:active { transform: scale(0.98); }
+
+        .card.selected { 
+            outline: 2px solid var(--theme-color); 
+            border-color: var(--theme-color); 
+            box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-color), transparent 80%); 
+        }
+        .card.selected .check-circle { 
+            background: var(--theme-color); 
+            border-color: var(--theme-color); 
+            box-shadow: 0 2px 10px color-mix(in srgb, var(--theme-color), transparent 50%);
+        }
+        .card.selected .check-circle::after { content: none; }
+
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; position: relative; padding-left: 36px; min-height: 40px; }
+        
+        .check-circle {
+            position: absolute; left: -8px; top: -4px; width: 32px; height: 32px; 
+            border: 2px solid rgba(255,255,255,0.15); border-radius: 50%; cursor: pointer; 
+            transition: 0.3s var(--ease-spring); background: rgba(0,0,0,0.2); z-index: 5;
+            display: grid; place-items: center;
+        }
+        .check-circle:hover { border-color: white; transform: scale(1.15); }
+
+        .client-tag { 
+            font-size: 13px; font-weight: 800; color: white; opacity: 0.8; 
+            padding: 4px 10px; background: rgba(0,0,0,0.2); border-radius: 12px;
+            letter-spacing: 0.5px; backdrop-filter: blur(4px);
+        }
+        
+        .action-group { display: flex; gap: 8px; z-index: 10; position: relative; }
+        .action-btn { 
+            width: 36px; height: 36px; border-radius: 12px; border:none; cursor: pointer; 
+            display: flex; align-items: center; justify-content: center; 
+            background: rgba(255,255,255,0.1); color: #cbd5e1; 
+            transition: 0.4s var(--ease-spring); font-size: 16px;
+            opacity: 0; transform: translateX(10px) scale(0.8);
+        }
+        .card:hover .action-btn { opacity: 1; transform: translateX(0) scale(1); }
+        .card:hover .action-btn:nth-child(1) { transition-delay: 0.05s; }
+        .card:hover .action-btn:nth-child(2) { transition-delay: 0.1s; }
+        .action-btn:hover { background: white; color: black; transform: translateY(-3px) scale(1.1); }
+        .action-btn.del:hover { background: #ef4444; color: white; }
+
+        .project-name { 
+            font-size: 20px; font-weight: 700; margin: 0 0 24px 0; 
+            color: #f8fafc; text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+            height: 52px; line-height: 1.3;
+        }
+
+        .price-main { font-size: 38px; font-weight: 800; color: white; display: flex; align-items: center; gap: 10px; margin-bottom: 20px; letter-spacing: -1px; font-family: ui-monospace, SFMono-Regular, monospace; }
+        .price-sub { font-size: 14px; color: rgba(255,255,255,0.5); display: flex; flex-direction: column; gap: 12px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 16px; }
+        .price-row { display: flex; justify-content: space-between; align-items: center; font-weight: 500; }
+        .price-row span:nth-child(2) { font-family: ui-monospace, SFMono-Regular, monospace; }
+        
+        .btn-add-mini { 
+            border: none; border-radius: 20px; padding: 4px 12px; font-size: 11px;
+            font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+            margin-left: 8px; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .btn-add-mini:hover { transform: translateY(-1px) scale(1.02); filter: brightness(1.1); }
+        .btn-add-mini:active { transform: scale(0.95); }
+        .btn-add-added { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+        .btn-add-reimb { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
+
+        .card-meta {
+            margin-top: 16px;
+            display: flex; flex-direction: column; gap: 4px;
+            min-height: 60px;
+            justify-content: flex-end;
+        }
+        .meta-row {
+            font-size: 12px; color: var(--text-dim);
+            height: 16px; line-height: 16px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            transition: opacity 0.2s;
+        }
+        .meta-row.invisible { opacity: 0; }
+        .meta-row.paid-date { color: var(--success); }
+
+        .card-foot { display: flex; gap: 12px; margin-top: auto; padding-top: 24px; }
+        
+        .status-btn { 
+            flex: 1; padding: 12px; border-radius: 12px; 
+            font-size: 15px; font-weight: 700;
+            cursor: pointer; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; 
+            display:flex; align-items:center; justify-content:center; gap:8px; 
+            transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        .status-btn:hover { background: rgba(255,255,255,0.1); color: white; transform: translateY(-2px); }
+        .status-btn:active { transform: scale(0.96); }
+        .status-btn.done { background: #f1f5f9; color: #0f172a; border-color: white; box-shadow: 0 4px 12px rgba(255,255,255,0.2); }
+        .status-btn.paid { background: var(--success); border-color: var(--success); color: #064e3b; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+
+        .batch-bar { 
+            position: fixed; bottom: 30px; left: 50%; 
+            transform: translateX(-50%) translateY(150%); 
+            background: rgba(15, 23, 42, 0.85); padding: 16px 32px; border-radius: 24px; 
+            display: flex; align-items: center; gap: 40px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1); 
+            transition: transform 0.5s var(--ease-spring), visibility 0.5s; 
+            z-index: 100; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(20px); 
+            min-width: 600px; justify-content: space-between;
+            visibility: hidden;
+        }
+        .batch-bar.show { transform: translateX(-50%) translateY(0); visibility: visible; }
+        
+        .batch-info { display: flex; flex-direction: column; }
+        .batch-total { font-size: 28px; font-weight: 800; color: white; font-family: monospace; }
+        .batch-detail { font-size: 13px; color: #94a3b8; margin-top: 2px; }
+        .batch-actions { display: flex; gap: 10px; }
+        .batch-btn { 
+            background: rgba(255,255,255,0.08); border: none; color: white; padding: 10px 20px; 
+            border-radius: 12px; cursor: pointer; font-size: 14px; font-weight: 600; 
+            transition: 0.3s var(--ease-spring); white-space: nowrap;
+        }
+        .batch-btn:hover { background: white; color: black; transform: translateY(-3px); }
+        .batch-btn.danger:hover { background: #ef4444; color: white; }
+
+        /* --- Modal --- */
+        .modal-overlay { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); 
+            display: none; place-items: center; z-index: 200; opacity: 0; transition: opacity 0.3s;
+        }
+        .modal-overlay.show { display: grid; opacity: 1; }
+        .modal { 
+            background: rgba(30, 41, 59, 0.85); width: 480px; padding: 40px; border-radius: 32px; 
+            border: 1px solid rgba(255,255,255,0.1); 
+            box-shadow: 0 40px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1);
+            transform: scale(0.9); opacity: 0; transition: all 0.4s var(--ease-spring);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-overlay.show .modal { transform: scale(1); opacity: 1; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom: 30px; }
+        .modal-title { font-size: 26px; color: white; font-weight: 800; letter-spacing: -0.5px; }
+
+        .input-group { margin-bottom: 24px; position: relative; }
+        .input-label { display: block; font-size: 12px; color: #94a3b8; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        
+        input[type="text"], select { 
+            width: 100%; background: transparent; border: none; border-bottom: 2px solid #334155; 
+            padding: 12px 0; color: white; font-size: 18px; font-weight: 500; 
+            transition: border 0.3s, color 0.3s; border-radius: 0;
+        }
+        input[type="text"]:focus, select:focus { border-color: var(--primary); }
+        input[type="text"]::placeholder { color: #475569; }
+
+        /* --- 新增：自定义下拉菜单样式 --- */
+        .client-input-wrapper { position: relative; width: 100%; }
+        .client-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: rgba(30, 41, 59, 0.95); 
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px; margin-top: 8px;
+            max-height: 240px; overflow-y: auto;
+            z-index: 100; display: none;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.2);
+            backdrop-filter: blur(12px);
+            animation: fadeUp 0.2s var(--ease-out);
+            padding: 8px;
+        }
+        .client-dropdown.show { display: block; }
+        .dropdown-item {
+            padding: 12px 16px; cursor: pointer; color: #cbd5e1;
+            display: flex; align-items: center; gap: 12px;
+            font-size: 15px; transition: 0.2s; border-radius: 8px;
+            font-weight: 500;
+        }
+        .dropdown-item:hover { background: rgba(255,255,255,0.08); color: white; transform: translateX(4px); }
+        .dropdown-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+        .dropdown-empty { padding: 16px; text-align: center; color: #64748b; font-size: 13px; }
+
+
+        .color-picker-wrapper { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+        input[type="color"] {
+            -webkit-appearance: none; border: none; width: 28px; height: 28px; padding: 0;
+            background: none; border-radius: 50%; overflow: hidden; cursor: pointer;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.1); transition: transform 0.2s;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
+        input[type="color"]:hover { transform: scale(1.1); }
+
+        .tag-presets { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tag-pill { 
+            background: rgba(255,255,255,0.05); color: #cbd5e1; padding: 8px 16px; 
+            border-radius: 20px; font-size: 13px; cursor: pointer; transition: 0.3s var(--ease-spring); 
+            border: 1px solid transparent; user-select: none;
+        }
+        .tag-pill:hover { background: white; color: black; transform: translateY(-2px); }
+        .tag-pill.danger { color: #f87171; border-color: rgba(248, 113, 113, 0.2); }
+        .tag-pill.danger:hover { background: #ef4444; color: white; border-color: #ef4444; }
+
+        .expense-list { display: none; }
+        .expense-list:not(:empty) { 
+            display: grid; gap: 12px; margin-bottom: 20px; 
+            background: rgba(0,0,0,0.1); border: 1px dashed rgba(255,255,255,0.1);
+            border-radius: 16px; padding: 16px;
+        }
+        .expense-item { display: grid; grid-template-columns: 2fr 1.5fr 1.5fr auto; gap: 12px; align-items: center; animation: fadeUp 0.3s ease; }
+        .expense-item input[type="text"] { font-size: 14px; padding: 6px 0; border-bottom: 1px solid #334155; color: #cbd5e1; text-align: left; }
+        .expense-item input[type="text"].exp-amount { text-align: right; font-family: monospace; color: white; }
+        .expense-item select { font-size: 12px; padding: 6px 0; border-bottom: 1px solid #334155; color: #94a3b8; background: transparent; appearance: none; }
+        .exp-del { color: #ef4444; cursor: pointer; width: 24px; height: 24px; display:flex; align-items:center; justify-content:center; border-radius:50%; transition: 0.2s; background: rgba(239,68,68,0.1); }
+        .exp-del:hover { background: #ef4444; color: white; transform: rotate(90deg); }
+
+        /* === Switch Toggle === */
+        .toggle-switch { position: relative; width: 50px; height: 28px; display:inline-block; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; inset:0; background-color: #334155; border-radius: 34px; transition: .3s; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); }
+        .slider:before { content: ""; position: absolute; height: 20px; width: 20px; left: 4px; bottom: 3px; background-color: white; border-radius: 50%; transition: .3s cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input:checked + .slider { background-color: var(--primary); border-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        #modalQuickAdd .modal {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.15);
+            width: 380px; padding: 30px;
+        }
+        .amount-input-wrapper {
+            position: relative; display: flex; align-items: baseline; justify-content: center;
+            margin: 24px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;
+        }
+        .currency-symbol { font-size: 36px; font-weight: 700; color: #94a3b8; margin-right: 8px; }
+        .big-input {
+            font-size: 60px !important; font-weight: 800 !important; color: white !important;
+            text-align: center; border: none !important; background: transparent !important;
+            width: 240px; padding: 0 !important; margin: 0 !important;
+            font-family: ui-monospace, SFMono-Regular, monospace; caret-color: var(--primary);
+        }
+        .big-input::placeholder { color: rgba(255,255,255,0.05); }
+        .quick-name-input { text-align:center; margin-bottom:16px; border-bottom:1px solid rgba(255,255,255,0.1) !important; color: #cbd5e1; }
+
+        .modal-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 30px; }
+        .btn-modal { display: flex; justify-content: center; align-items: center; padding: 16px; border-radius: 16px; font-weight: 700; cursor: pointer; transition: 0.2s var(--ease-spring); font-size: 16px; border: none; }
+        .btn-modal.cancel { background: rgba(255,255,255,0.08); color: #cbd5e1; }
+        .btn-modal.cancel:hover { background: rgba(255,255,255,0.15); color: white; }
+        .btn-modal.confirm { background: var(--primary); color: white; box-shadow: 0 4px 15px rgba(99,102,241,0.4); }
+        .btn-modal.confirm:hover { background: var(--primary-hover); transform: translateY(-2px); }
+
+        /* === 导出背景升级 (Premium Layout) === */
+        #export-container { 
+            position: absolute; top: -9999px; left: -9999px; width: 1200px; 
+            /* 高级深色背景 */
+            background: #0b1121;
+            color: white; padding: 80px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; 
+            background-image: 
+                radial-gradient(circle at 100% 0%, rgba(99,102,241,0.08) 0%, transparent 40%),
+                radial-gradient(circle at 0% 100%, rgba(34,211,238,0.05) 0%, transparent 40%);
+        }
+        .export-header {
+            display: flex; justify-content: space-between; align-items: flex-end; 
+            border-bottom: 2px solid #334155; padding-bottom: 40px; margin-bottom: 40px;
+        }
+        .export-title {
+            font-size: 56px; font-weight: 900; margin: 0; 
+            letter-spacing: -1px; color: #f8fafc; 
+            display: flex; align-items: center; gap: 20px;
+        }
+        .export-subtitle {
+            font-size: 20px; color: #64748b; font-weight: 400; letter-spacing: 2px; text-transform: uppercase;
+        }
+        
+        .export-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 20px; }
+        .export-table th { 
+            text-align: left; color: #94a3b8; 
+            border-bottom: 1px solid #334155; padding: 20px 24px; 
+            font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+            background: rgba(255,255,255,0.02);
+        }
+        .export-table th:first-child { border-top-left-radius: 8px; }
+        .export-table th:last-child { border-top-right-radius: 8px; text-align: right; }
+        
+        .export-table td { 
+            border-bottom: 1px solid #1e293b; padding: 24px; 
+            font-size: 16px; color: #e2e8f0; vertical-align: middle;
+        }
+        .export-table tr:last-child td { border-bottom: none; }
+        .export-table td:last-child { text-align: right; }
+
+        .export-footer {
+            margin-top: 60px; padding-top: 40px; border-top: 2px solid #334155;
+            display: flex; justify-content: space-between; align-items: flex-end;
+        }
+        .total-label { font-size: 16px; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+        .total-amount { font-size: 72px; font-weight: 800; color: white; line-height: 1; letter-spacing: -2px; font-family: ui-monospace, monospace; }
+        .export-note { font-size: 14px; color: #475569; max-width: 400px; line-height: 1.6; }
+
+        .svg-icon { width:20px; height:20px; fill:currentColor; margin-right: 8px; }
+
+        @media (max-width: 768px) {
+            .mobile-header { display: flex; }
+            aside {
+                position: fixed; top: 0; bottom: 0; left: 0; transform: translateX(-100%);
+                width: 85%; max-width: 320px; box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+                padding-top: 80px; background: rgba(15,23,42,0.95);
+            }
+            aside.open { transform: translateX(0); }
+            aside .brand { display: none; }
+            main { padding: 20px; padding-top: 80px; }
+            .project-grid { grid-template-columns: 1fr; gap: 20px; }
+            .card { padding: 24px; min-height: auto; } /* 移动端可以不强制高度 */
+            .project-name { font-size: 18px; margin-bottom: 16px; min-height: auto; }
+            .price-main { font-size: 32px; }
+            .batch-bar {
+                width: 92%; min-width: unset; left: 4%; transform: translateY(150%);
+                bottom: 20px; padding: 20px; flex-direction: column; gap: 20px; align-items: stretch;
+            }
+            .batch-bar.show { transform: translateY(0); }
+            .modal { width: 90vw; padding: 24px; max-height: 85vh; border-radius: 24px; }
+            .new-project-card { min-height: 220px; }
+            .expense-item { grid-template-columns: 1fr 1fr; gap: 8px; border-bottom:1px dashed #333; padding-bottom:8px; }
+            .expense-item select { grid-column: 1 / -1; }
+            .exp-del { position:absolute; right:0; }
+            .header-actions { margin-top: 10px; width: 100%; justify-content: space-between; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar(false)"></div>
+
+<div class="mobile-header">
+    <div style="font-weight:900; font-size:18px; display:flex; align-items:center; gap:8px;">
+        <svg style="width:24px; height:24px; fill:var(--success)" viewBox="0 0 24 24"><path d="M12,2L2,12L12,22L22,12L12,2Z"></path></svg>
+        森屿 Pro
+    </div>
+    <button class="menu-btn" onclick="toggleSidebar(true)">☰</button>
+</div>
+
+<div class="app-container">
+    <aside id="appAside">
+        <div class="brand">
+            <svg style="width:32px; height:32px; fill:var(--success)" viewBox="0 0 24 24"><path d="M12,2L2,12L12,22L22,12L12,2Z"></path></svg>
+            森屿 WORKBENCH
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"></path></svg>
+                预计总净利润
+            </div>
+            <div class="stat-value" id="totalNetIncome">¥0</div>
+        </div>
+        
+        <div style="flex:1; overflow-y:auto; padding-right:5px; margin-right: -10px;">
+            <!-- 新增时间筛选区域 -->
+            <div class="group-title">时间筛选 Time</div>
+            <div class="time-filter-group">
+                <div class="time-select-wrapper">
+                    <select id="yearFilter" class="time-select" onchange="setTimeFilter()">
+                        <option value="all">所有年份</option>
+                    </select>
+                </div>
+                <div class="time-select-wrapper">
+                    <select id="monthFilter" class="time-select" onchange="setTimeFilter()">
+                        <option value="all">所有月份</option>
+                        <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
+                        <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
+                        <option value="07">7月</option><option value="08">8月</option><option value="09">9月</option>
+                        <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="group-title">概览 Overview</div>
+            
+            <button class="nav-btn active" onclick="setFilter('all', this)">
+                <div class="nav-left">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"></path></svg>
+                    全部项目
+                </div>
+                <div class="badge-group">
+                    <span class="badge-money" id="money-all">¥0</span>
+                    <span class="badge-count" id="count-all">0</span>
+                </div>
+            </button>
+            <button class="nav-btn" onclick="setFilter('undelivered', this)">
+                <div class="nav-left">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"></path></svg>
+                    进行中
+                </div> 
+                <div class="badge-group">
+                    <span class="badge-money" id="money-undelivered">¥0</span>
+                    <span class="badge-count" id="count-undelivered">0</span>
+                </div>
+            </button>
+            <button class="nav-btn" onclick="setFilter('delivered', this)">
+                <div class="nav-left">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20,8H17V6A2,2 0 0,0 15,4H9A2,2 0 0,0 7,6V8H4A2,2 0 0,0 2,10V20A2,2 0 0,0 4,22H20A2,2 0 0,0 22,20V10A2,2 0 0,0 20,8M9,6H15V8H9V6M20,20H4V10H20V20Z"></path></svg>
+                    待结账
+                </div> 
+                <div class="badge-group">
+                    <span class="badge-money" id="money-delivered">¥0</span>
+                    <span class="badge-count" id="count-delivered">0</span>
+                </div>
+            </button>
+            <button class="nav-btn" onclick="setFilter('unpaid', this)">
+                <div class="nav-left">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M5,6H23V4H5V6M5,10H23V8H5V10M5,20H23V18H5V20M5,15H23V13H5V15M1,4H3V20H1V4Z"></path></svg>
+                    催款中
+                </div> 
+                <div class="badge-group">
+                    <span class="badge-money" id="money-unpaid">¥0</span>
+                    <span class="badge-count" id="count-unpaid">0</span>
+                </div>
+            </button>
+            <button class="nav-btn" onclick="setFilter('unquoted', this)">
+                <div class="nav-left">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M11,18H13V16H11V18M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,20C16.41,20 20,16.41 20,12C20,7.59 16.41,4 12,4C7.59,4 4,7.59 4,12C4,16.41 7.59,20 12,20M12,6A4,4 0 0,1 16,10C16,12.25 12.38,13.25 12.38,13.25V14.75H11.63V12.75C11.63,12.75 15.13,12.13 15.13,10C15.13,8.38 13.88,7.13 12,7.13C10.13,7.13 8.88,8.38 8.88,10H8.13C8.13,7.5 9.63,6 12,6Z"></path></svg>
+                    暂未报价
+                </div> 
+                <div class="badge-group">
+                    <span class="badge-money" id="money-unquoted">-</span>
+                    <span class="badge-count" id="count-unquoted">0</span>
+                </div>
+            </button>
+            <button class="nav-btn" onclick="setFilter('paid', this)">
+                <div class="nav-left">
+                    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg>
+                    已结账
+                </div> 
+                <div class="badge-group">
+                    <span class="badge-money" id="money-paid">¥0</span>
+                    <span class="badge-count" id="count-paid">0</span>
+                </div>
+            </button>
+
+            <div class="group-title" style="margin-top:30px;">甲方 Clients</div>
+            <div id="clientListSidebar" class="client-list-container">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+
+        <div class="aside-footer">
+            <button class="btn-footer btn-export" onclick="exportToImage('view')">
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21,19V5c0-1.1-0.9-2-2-2H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14C20.1,21,21,20.1,21,19z M8.5,13.5l2.5,3.01L14.5,12l4.5,6H5L8.5,13.5z"></path></svg>
+                导出图片
+            </button>
+            <button class="btn-footer btn-save" onclick="saveHtmlFile()">
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"></path></svg>
+                导出文件
+            </button>
+        </div>
+    </aside>
+
+    <main>
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:32px; flex-wrap: wrap;">
+            <div>
+                <h2 style="font-size:36px; font-weight:800; color:white; letter-spacing:-0.5px;">项目列表</h2>
+                <p style="font-size:14px; color:#64748b; margin-top:8px;">中文"万"位格式 · 自动分组 · 色彩管理</p>
+            </div>
+            <div class="header-actions">
+                <button onclick="toggleSelectAll()" class="btn-header-action">
+                    <svg style="width:16px; height:16px; fill:currentColor" viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M17,11H13V7H11V11H7V13H11V17H13V13H17V11Z"></path></svg>
+                    <span id="btnSelectAllText">全选本页</span>
+                </button>
+            </div>
+        </div>
+        <div id="projectList" class="project-grid">
+            <!-- 动态生成 -->
+        </div>
+    </main>
+</div>
+
+<div class="batch-bar" id="batchBar">
+    <div class="batch-info">
+        <div style="font-size:13px; color:#94a3b8; font-weight:600; margin-bottom:4px;">
+            已选 <span id="batchCount" style="color:#22d3ee; font-size:15px;">0</span> 个
+        </div>
+        <div class="batch-total">¥<span id="batchTotal">0</span></div>
+        <div class="batch-detail">制作费 ¥<span id="batchBase">0</span> | 报销/垫付 ¥<span id="batchReimb">0</span></div>
+    </div>
+    <div class="batch-actions">
+        <button class="batch-btn" style="background:var(--success); color:#064e3b;" onclick="exportToImage('selected')">🖼️ 合并导出</button>
+        <button class="batch-btn" onclick="batchAction('deliver')">设为已交片</button>
+        <button class="batch-btn" onclick="batchAction('pay')">设为已结账</button>
+        <button class="batch-btn danger" onclick="batchAction('delete')">删除</button>
+        <button class="batch-btn" style="background:transparent; color:#94a3b8" onclick="clearSelection()">取消</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title" id="modalTitle">编辑项目</span>
+            <button onclick="closeModal()" style="background:none; border:none; color:#64748b; font-size:24px; cursor:pointer;">✕</button>
+        </div>
+        <input type="hidden" id="editId" value="">
+        
+        <div class="input-group">
+            <label class="input-label">项目名称</label>
+            <input type="text" id="inputName" placeholder="例如：2025宣传片v1">
+        </div>
+        
+        <!-- 修改后的甲方选择 UI -->
+        <div class="input-group">
+            <label class="input-label">甲方 &amp; 专属颜色</label>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <div class="client-input-wrapper">
+                    <input type="text" id="inputClient" placeholder="输入或选择甲方" autocomplete="off" 
+                           oninput="filterClientDropdown(this.value); updateColorPreview(this.value)"
+                           onfocus="filterClientDropdown(this.value)"
+                           onblur="setTimeout(() => document.getElementById('clientDropdown').classList.remove('show'), 200)">
+                    <div id="clientDropdown" class="client-dropdown"></div>
+                </div>
+                <div class="color-picker-wrapper" title="为此甲方设置专属颜色">
+                    <input type="color" id="inputClientColor">
+                </div>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom: 24px;">
+            <div class="input-group" style="margin:0;">
+                <label class="input-label">基础报酬</label>
+                <input type="text" id="inputPrice" placeholder="0" onblur="formatInput(this)" style="font-family:monospace;">
+            </div>
+            <div class="input-group" style="margin:0;">
+                <label class="input-label" style="color:#10b981">额外追加</label>
+                <input type="text" id="inputAdded" placeholder="0" style="color:#34d399; font-family:monospace;" onblur="formatInput(this)">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label class="input-label" style="display:flex; justify-content:space-between; color:#22d3ee">
+                <span>差旅/报销 (垫付) &amp; 成本</span>
+                <span onclick="addExpenseRow()" style="cursor:pointer; opacity:0.8">+ 添加明细</span>
+            </label>
+            
+            <div class="tag-presets">
+                <div class="tag-pill" onclick="addExpenseRow('素材购买','','reimb')">+素材</div>
+                <div class="tag-pill" onclick="addExpenseRow('差旅出行','','reimb')">+差旅</div>
+                <div class="tag-pill" onclick="addExpenseRow('酒店住宿','','reimb')">+酒店</div>
+                <div class="tag-pill" onclick="addExpenseRow('餐饮伙食','','reimb')">+餐饮</div>
+                <div class="tag-pill danger" onclick="addExpenseRow('外包成本','','cost')">+外包成本</div>
+            </div>
+
+            <div id="expenseList" class="expense-list"></div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; margin:20px 0;">
+            <label class="toggle-switch">
+                <input type="checkbox" id="inputDefined" checked="">
+                <span class="slider"></span>
+            </label>
+            <label style="font-size:14px; cursor:pointer; color:#cbd5e1; user-select:none;">价格已确认 (未开启显示"暂未报价")</label>
+        </div>
+
+        <div class="modal-btns">
+            <button class="btn-modal cancel" onclick="closeModal()">取消</button>
+            <button class="btn-modal confirm" onclick="saveProject()">保存项目</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modalQuickAdd">
+    <div class="modal">
+        <div style="text-align:center;">
+            <h3 style="margin-bottom:8px; color:white; font-size:20px;" id="quickAddTitle">添加报销</h3>
+            <p style="color:#94a3b8; font-size:13px; margin-bottom:24px;" id="quickAddDesc">支持 1w, 5k 等快捷输入</p>
+        </div>
+        <input type="hidden" id="quickAddId">
+        <input type="hidden" id="quickAddType">
+        
+        <div class="amount-input-wrapper">
+            <span class="currency-symbol">¥</span>
+            <input type="text" id="inputQuickAmount" placeholder="" class="big-input" onblur="formatInput(this)">
+        </div>
+
+        <input type="text" id="inputQuickName" class="quick-name-input" placeholder="费用名称 (选填)" style="width:100%; border:none; background:transparent;">
+
+        <div class="tag-presets" id="quickAddTags" style="justify-content:center; margin-bottom: 20px;">
+             <div class="tag-pill" onclick="setQuickVal('素材购买')">素材</div>
+             <div class="tag-pill" onclick="setQuickVal('差旅出行')">差旅</div>
+             <div class="tag-pill" onclick="setQuickVal('酒店住宿')">酒店</div>
+        </div>
+        
+        <div class="modal-btns">
+            <button class="btn-modal cancel" onclick="document.getElementById('modalQuickAdd').classList.remove('show')">取消</button>
+            <button class="btn-modal confirm" onclick="confirmQuickAdd()">确认添加</button>
+        </div>
+    </div>
+</div>
+
+<div id="export-container">
+    <div class="export-header">
+        <div>
+            <h1 class="export-title">
+                <svg style="width:48px; height:48px; fill:#10b981;" viewBox="0 0 24 24"><path d="M12,2L2,12L12,22L22,12L12,2Z"></path></svg>
+                森屿 | 结算单
+            </h1>
+        </div>
+        <div class="export-subtitle">SENYU STUDIO INVOICE</div>
+    </div>
+    
+    <table class="export-table">
+        <thead id="export-thead"></thead>
+        <tbody id="export-tbody"></tbody>
+    </table>
+    
+    <div class="export-footer">
+        <div class="export-note">
+            感谢您的信任与支持。<br>
+            Thank you for your business.
+        </div>
+        <div style="text-align:right">
+            <div class="total-label">总计 Total Amount</div>
+            <div class="total-amount">¥<span id="export-sum">0</span></div>
+            <div style="font-size:16px; color:#64748b; margin-top:8px;">共 <span id="export-count" style="color:white; font-weight:bold;">0</span> 个项目</div>
+        </div>
+    </div>
+</div>
+
+<script id="data-script">
+    var _PROJECT_DATA = [{"id":1765878728610,"name":"超算互联网-智能体-竖屏","client":"刘晨","basePrice":0,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":false,"isPaid":false},{"id":1765878440365,"name":"华为平板电脑-23个竖屏","client":"驰子","basePrice":0,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16"},{"id":1765878377171,"name":"上海岚图发布会-现场剪辑13条","client":"徐明哲","basePrice":0,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16"},{"id":1765878304027,"name":"岚图梦想家 12条片子","client":"徐明哲","basePrice":20000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16"},{"id":1765878206045,"name":"高山汽车短片","client":"徐明哲","basePrice":8000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"paymentDate":null,"deliveryDate":"2025-12-16"},{"id":1765878146956,"name":"调色-擦屁股","client":"强子","basePrice":1000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765878101248,"name":"华为运动健康","client":"杨振铎","basePrice":3000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16","paymentDate":null},{"id":1765878085396,"name":"国企参观-2","client":"杨振铎","basePrice":1000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765878058242,"name":"国企参观视频","client":"杨振铎","basePrice":1000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877988661,"name":"厦门大学-采访片-增加2k","client":"刘晨","basePrice":0,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":false,"isPaid":false},{"id":1765877970801,"name":"曙光-超长发布会","client":"刘晨","basePrice":7000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877943370,"name":"超算互联网-智能体介绍","client":"刘晨","basePrice":20000,"addedPrice":10000,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":false,"isPaid":false},{"id":1765877911001,"name":"20秒航拍x2","client":"刘晨","basePrice":5000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877895170,"name":"超算-8分钟长采访","client":"刘晨","basePrice":20000,"addedPrice":0,"priceDefined":true,"expenses":[{"name":"外包成本","amount":1500,"type":"cost"}],"createdDate":"2025-12-16","isDelivered":false,"isPaid":false,"paymentDate":null,"deliveryDate":null},{"id":1765877866981,"name":"CCTV合作的采访片","client":"刘晨","basePrice":8000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"paymentDate":"2025-12-16","deliveryDate":"2025-12-16"},{"id":1765877789421,"name":"曙光工厂-素材费未统计","client":"刘晨","basePrice":10000,"addedPrice":5000,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":false,"isPaid":true,"paymentDate":"2025-12-16"},{"id":1765877651927,"name":"一汽大众采访片","client":"柴哥","basePrice":4000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16"},{"id":1765877643715,"name":"中国人寿-程序员采访片","client":"柴哥","basePrice":5000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16"},{"id":1765877627650,"name":"京东-七夕","client":"柴哥","basePrice":4000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16"},{"id":1765877617372,"name":"京东-机器人大会x2","client":"柴哥","basePrice":9000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877559901,"name":"京东贴纸动画","client":"柴哥","basePrice":6500,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877539484,"name":"三国杀","client":"柴哥","basePrice":5000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877525293,"name":"京东买药","client":"柴哥","basePrice":5000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877513518,"name":"京东快闪-擦屁股","client":"柴哥","basePrice":2300,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877493088,"name":"欧冠","client":"柴哥","basePrice":29000,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":true,"deliveryDate":"2025-12-16","paymentDate":"2025-12-16"},{"id":1765877215052,"name":"DCU擦屁股","client":"刘晨","basePrice":0,"addedPrice":0,"priceDefined":true,"expenses":[],"createdDate":"2025-12-16","isDelivered":true,"isPaid":false,"deliveryDate":"2025-12-16"}];
+</script>
+
+<script>
+    let projects = [];
+    let clientColors = {};
+
+    if (typeof _PROJECT_DATA !== 'undefined' && _PROJECT_DATA.length > 0) { 
+        projects = _PROJECT_DATA; 
+    } else { 
+        const local = localStorage.getItem('project_v9_data'); 
+        if (local) projects = JSON.parse(local); 
+    }
+    projects.forEach(p => { if (!p.expenses) p.expenses = []; });
+
+    const localColors = localStorage.getItem('client_colors_v9');
+    if (localColors) clientColors = JSON.parse(localColors);
+
+    let currentFilter = 'all';
+    let selectedClient = '';
+    let filterYear = 'all';
+    let filterMonth = 'all';
+    let selectedIds = new Set(); 
+
+    function toggleSidebar(show) {
+        const aside = document.getElementById('appAside');
+        const overlay = document.getElementById('mobileOverlay');
+        const isOpen = show !== undefined ? show : !aside.classList.contains('open');
+        aside.classList.toggle('open', isOpen);
+        overlay.classList.toggle('show', isOpen);
+    }
+
+    function formatCNY(num) {
+        if (!num && num !== 0) return '0';
+        let str = num.toString();
+        return str.replace(/\B(?=(\d{4})+(?!\d))/g, ",");
+    }
+
+    function parseMoney(str) {
+        if(!str) return 0;
+        str = str.toString().trim().toLowerCase();
+        let mult = 1;
+        if(str.includes('w')) mult = 10000;
+        if(str.includes('k')) mult = 1000;
+        let val = parseFloat(str.replace(/[wk]/g, ''));
+        return isNaN(val) ? 0 : val * mult;
+    }
+
+    function formatInput(el) { const val = parseMoney(el.value); if(val > 0) el.value = val; }
+    function getDateStr() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+    function getClientColor(name) {
+        if (!name) return '#6366f1'; 
+        if (clientColors[name]) return clientColors[name];
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        const hue = Math.abs(hash) % 360;
+        return `hsl(${hue}, 65%, 60%)`;
+    }
+
+    function saveClientColor(name, color) {
+        if (!name || !color) return;
+        clientColors[name] = color;
+        localStorage.setItem('client_colors_v9', JSON.stringify(clientColors));
+    }
+
+    function populateDateFilters() {
+        const years = new Set();
+        projects.forEach(p => {
+            if(p.createdDate) {
+                years.add(p.createdDate.split('-')[0]);
+            }
+        });
+        const sortedYears = Array.from(years).sort().reverse();
+        const yearSelect = document.getElementById('yearFilter');
+        yearSelect.innerHTML = '<option value="all">所有年份</option>';
+        sortedYears.forEach(y => {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.innerText = y + '年';
+            yearSelect.appendChild(opt);
+        });
+        yearSelect.value = filterYear;
+        document.getElementById('monthFilter').value = filterMonth;
+    }
+
+    function setTimeFilter() {
+        filterYear = document.getElementById('yearFilter').value;
+        filterMonth = document.getElementById('monthFilter').value;
+        renderProjects();
+    }
+
+    function getFilteredProjects() {
+        return projects.filter(p => {
+            if (currentFilter === 'undelivered' && p.isDelivered) return false;
+            if (currentFilter === 'delivered' && (!p.isDelivered || p.isPaid)) return false; 
+            if (currentFilter === 'unpaid' && p.isPaid) return false; 
+            if (currentFilter === 'paid' && !p.isPaid) return false;
+            if (currentFilter === 'unquoted' && (p.priceDefined && ((Number(p.basePrice)||0) + (Number(p.addedPrice)||0)) > 0)) return false;
+            if (selectedClient && p.client !== selectedClient) return false;
+            
+            const pDate = p.createdDate || '';
+            const pYear = pDate.split('-')[0];
+            const pMonth = pDate.split('-')[1];
+            if (filterYear !== 'all' && pYear !== filterYear) return false;
+            if (filterMonth !== 'all' && pMonth !== filterMonth) return false;
+            return true;
+        });
+    }
+
+    function toggleSelectAll() {
+        const visibleProjects = getFilteredProjects();
+        if (visibleProjects.length === 0) return;
+        const allSelected = visibleProjects.every(p => selectedIds.has(p.id));
+        if (allSelected) visibleProjects.forEach(p => selectedIds.delete(p.id));
+        else visibleProjects.forEach(p => selectedIds.add(p.id));
+        renderProjects(); 
+        updateBatchBar(); 
+    }
+
+    function updateSelectAllBtn() {
+        const visibleProjects = getFilteredProjects();
+        const btnText = document.getElementById('btnSelectAllText');
+        if (!btnText) return;
+        if (visibleProjects.length > 0 && visibleProjects.every(p => selectedIds.has(p.id))) {
+            btnText.innerText = "取消全选";
+        } else {
+            btnText.innerText = "全选本页";
+        }
+    }
+
+    function renderProjects() {
+        const list = document.getElementById('projectList');
+        let filtered = getFilteredProjects();
+
+        filtered.sort((a, b) => {
+            const clientCompare = a.client.localeCompare(b.client, 'zh-CN');
+            if (clientCompare !== 0) return clientCompare;
+            return b.id - a.id;
+        });
+
+        let html = `
+            <div class="new-project-card" onclick="openModal(null, '${selectedClient}')">
+                <div class="new-project-content">
+                    <div class="new-icon"><svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:currentColor"><path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"></path></svg></div>
+                    <div class="new-text">新建项目 ${selectedClient ? '('+selectedClient+')' : ''}</div>
+                </div>
+            </div>
+        `;
+
+        filtered.forEach(p => {
+            const isSelected = selectedIds.has(p.id);
+            const base = Number(p.basePrice) || 0;
+            const added = Number(p.addedPrice) || 0;
+            const reimbTotal = p.expenses.filter(e => e.type === 'reimb').reduce((sum, e) => sum + Number(e.amount), 0);
+            const totalBillable = base + added + reimbTotal;
+            const color = getClientColor(p.client);
+
+            let priceDisplay;
+            if ((totalBillable === 0 && base === 0) || !p.priceDefined) {
+                priceDisplay = `
+                    <div style="display:flex; align-items:center; gap:8px; color:#f59e0b; opacity:0.9">
+                        <svg style="width:28px; height:28px; fill:currentColor" viewBox="0 0 24 24"><path d="M13,9H11V7H13M13,17H11V11H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"></path></svg>
+                        <span style="font-size:20px; font-weight:700;">暂未报价</span>
+                    </div>
+                `;
+            } else {
+                priceDisplay = `¥${formatCNY(totalBillable)}`;
+            }
+
+            const dateCreated = p.createdDate || '-';
+            const dateDeliver = p.deliveryDate || '-';
+            const datePaid = p.paymentDate || '-';
+            const deliverClass = p.isDelivered ? '' : 'invisible';
+            const paidClass = p.isPaid ? 'paid-date' : 'invisible';
+
+            html += `
+                <div id="card-${p.id}" class="card ${isSelected ? 'selected' : ''}" 
+                     style="--theme-color: ${color}"
+                     onclick="cardClick(event, ${p.id})">
+                    <div class="card-header">
+                        <div class="check-circle" onclick="event.stopPropagation(); toggleSelect(${p.id})"></div>
+                        <span class="client-tag">${escapeHtml(p.client)}</span>
+                        <div class="action-group">
+                            <button class="action-btn" title="编辑" onclick="event.stopPropagation(); editProject(${p.id})">✎</button>
+                            <button class="action-btn del" title="删除" onclick="event.stopPropagation(); deleteProject(${p.id})">✕</button>
+                        </div>
+                    </div>
+                    
+                    <div class="project-name">${escapeHtml(p.name)}</div>
+                    <div class="price-main">${priceDisplay}</div>
+                    
+                    <div class="price-sub">
+                        <div class="price-row">
+                            <span>基础制作</span> <span>¥${formatCNY(base)}</span>
+                        </div>
+                        <div class="price-row">
+                            <span style="display:flex; align-items:center;">额外追加 <button class="btn-add-mini btn-add-added" onclick="event.stopPropagation(); quickAdd(${p.id}, 'added')">+ 添加</button></span>
+                            <span style="color:${added>0?'#34d399':''}">+${formatCNY(added)}</span>
+                        </div>
+                        <div class="price-row">
+                            <span style="display:flex; align-items:center;">报销/垫付 <button class="btn-add-mini btn-add-reimb" onclick="event.stopPropagation(); quickAdd(${p.id}, 'reimb')">+ 添加</button></span>
+                            <span style="color:${reimbTotal>0?'#22d3ee':''}">+${formatCNY(reimbTotal)}</span>
+                        </div>
+                    </div>
+
+                    <div class="card-meta" id="meta-${p.id}">
+                        <div class="meta-row">📅 创建: ${dateCreated}</div>
+                        <div class="meta-row ${deliverClass}">🎬 交片: ${dateDeliver}</div>
+                        <div class="meta-row ${paidClass}">💰 结账: ${datePaid}</div>
+                    </div>
+
+                    <div class="card-foot">
+                        <button id="btn-deliver-${p.id}" class="status-btn ${p.isDelivered ? 'done' : ''}" onclick="event.stopPropagation(); toggleStatus(${p.id}, 'isDelivered')">
+                            ${p.isDelivered ? '已交片' : '未交片'}
+                        </button>
+                        <button id="btn-pay-${p.id}" class="status-btn ${p.isPaid ? 'paid' : ''}" onclick="event.stopPropagation(); toggleStatus(${p.id}, 'isPaid')">
+                            ${p.isPaid ? '已结账' : '待结账'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        list.innerHTML = html;
+        updateStats();
+        updateSelectAllBtn(); 
+    }
+
+    const calcNet = (list) => list.reduce((sum, p) => {
+        if(!p.priceDefined) return sum;
+        const b = Number(p.basePrice)||0;
+        const a = Number(p.addedPrice)||0;
+        const c = p.expenses.filter(e => e.type === 'cost').reduce((s, e) => s + Number(e.amount), 0);
+        return sum + (b + a - c);
+    }, 0);
+
+    function updateStats() {
+        const filterByTime = (list) => list.filter(p => {
+            const pDate = p.createdDate || '';
+            const pYear = pDate.split('-')[0];
+            const pMonth = pDate.split('-')[1];
+            if (filterYear !== 'all' && pYear !== filterYear) return false;
+            if (filterMonth !== 'all' && pMonth !== filterMonth) return false;
+            return true;
+        });
+
+        const timeFilteredProjects = filterByTime(projects);
+        const all = timeFilteredProjects;
+        const undelivered = timeFilteredProjects.filter(p => !p.isDelivered);
+        const delivered = timeFilteredProjects.filter(p => p.isDelivered && !p.isPaid);
+        const unpaid = timeFilteredProjects.filter(p => !p.isPaid);
+        const unquoted = timeFilteredProjects.filter(p => p.priceDefined && ((Number(p.basePrice)||0) + (Number(p.addedPrice)||0)) === 0);
+        const paid = timeFilteredProjects.filter(p => p.isPaid);
+
+        document.getElementById('count-all').innerText = all.length;
+        document.getElementById('money-all').innerText = '¥' + formatCNY(calcNet(all));
+        document.getElementById('count-undelivered').innerText = undelivered.length;
+        document.getElementById('money-undelivered').innerText = '¥' + formatCNY(calcNet(undelivered));
+        document.getElementById('count-delivered').innerText = delivered.length;
+        document.getElementById('money-delivered').innerText = '¥' + formatCNY(calcNet(delivered));
+        document.getElementById('count-unpaid').innerText = unpaid.length;
+        document.getElementById('money-unpaid').innerText = '¥' + formatCNY(calcNet(unpaid));
+        document.getElementById('count-unquoted').innerText = unquoted.length;
+        document.getElementById('count-paid').innerText = paid.length;
+        document.getElementById('money-paid').innerText = '¥' + formatCNY(calcNet(paid));
+        document.getElementById('totalNetIncome').innerText = '¥' + formatCNY(calcNet(all));
+
+        const clients = [...new Set(projects.map(p => p.client).filter(c=>c))];
+        const clientListDiv = document.getElementById('clientListSidebar');
+        let clientHtml = `<button class="nav-btn ${selectedClient===''?'active':''}" onclick="selectClient('')">
+            <div class="nav-left"><span style="background:#64748b" class="client-dot"></span>全部甲方</div>
+        </button>`;
+        
+        clients.forEach(c => {
+            const cProjects = filterByTime(projects.filter(p => p.client === c));
+            const cTotal = calcNet(cProjects);
+            const color = getClientColor(c);
+            
+            clientHtml += `
+                <button class="nav-btn ${selectedClient===c?'active':''}" 
+                        onclick="selectClient('${c}')" 
+                        style="--theme-color: ${color}">
+                    <div class="nav-left"><span style="background:${color}" class="client-dot"></span>${c}</div>
+                    <div class="badge-group">
+                        <span class="badge-money">¥${formatCNY(cTotal)}</span>
+                        <span class="badge-count">${cProjects.length}</span>
+                    </div>
+                </button>
+            `;
+        });
+        clientListDiv.innerHTML = clientHtml;
+        updateBatchBar();
+    }
+
+    function updateBatchBar() {
+        const batchBar = document.getElementById('batchBar');
+        if (selectedIds.size > 0) {
+            batchBar.classList.add('show');
+            const selected = projects.filter(p => selectedIds.has(p.id));
+            let sBase = 0, sReimb = 0, sTotal = 0;
+            selected.forEach(p => {
+                const b = (Number(p.basePrice)||0) + (Number(p.addedPrice)||0);
+                const r = p.expenses.filter(e => e.type === 'reimb').reduce((s, e) => s + Number(e.amount), 0);
+                sBase += b; sReimb += r; sTotal += (b + r);
+            });
+            document.getElementById('batchCount').innerText = selectedIds.size;
+            document.getElementById('batchTotal').innerText = formatCNY(sTotal);
+            document.getElementById('batchBase').innerText = formatCNY(sBase);
+            document.getElementById('batchReimb').innerText = formatCNY(sReimb);
+        } else {
+            batchBar.classList.remove('show');
+        }
+    }
+
+    function toggleStatus(id, type) {
+        const p = projects.find(x => x.id === id);
+        if (!p) return;
+
+        p[type] = !p[type];
+        if (type === 'isDelivered') p.deliveryDate = p[type] ? getDateStr() : null;
+        if (type === 'isPaid') p.paymentDate = p[type] ? getDateStr() : null;
+
+        const btn = document.getElementById(type === 'isDelivered' ? `btn-deliver-${id}` : `btn-pay-${id}`);
+        if (btn) {
+            if (type === 'isDelivered') {
+                btn.className = `status-btn ${p.isDelivered ? 'done' : ''}`;
+                btn.innerHTML = p.isDelivered ? '已交片' : '未交片';
+            } else {
+                btn.className = `status-btn ${p.isPaid ? 'paid' : ''}`;
+                btn.innerHTML = p.isPaid ? '已结账' : '待结账';
+            }
+        }
+
+        const metaDiv = document.getElementById(`meta-${id}`);
+        if (metaDiv) {
+            const dateCreated = p.createdDate || '-';
+            const dateDeliver = p.deliveryDate || '-';
+            const datePaid = p.paymentDate || '-';
+            const deliverClass = p.isDelivered ? '' : 'invisible';
+            const paidClass = p.isPaid ? 'paid-date' : 'invisible';
+            
+            metaDiv.innerHTML = `
+                <div class="meta-row">📅 创建: ${dateCreated}</div>
+                <div class="meta-row ${deliverClass}">🎬 交片: ${dateDeliver}</div>
+                <div class="meta-row ${paidClass}">💰 结账: ${datePaid}</div>
+            `;
+        }
+
+        localStorage.setItem('project_v9_data', JSON.stringify(projects));
+        populateDateFilters(); 
+        updateStats(); 
+    }
+
+    // --- 新增：处理自定义下拉菜单逻辑 ---
+    function filterClientDropdown(val) {
+        const dropdown = document.getElementById('clientDropdown');
+        const clients = [...new Set(projects.map(p => p.client).filter(c=>c))];
+        const filtered = clients.filter(c => c.toLowerCase().includes((val||'').toLowerCase()));
+        
+        let html = '';
+        if (filtered.length === 0) {
+            if (val) {
+               html = `<div class="dropdown-empty">将新建甲方 "${val}"</div>`; 
+            } else {
+               html = `<div class="dropdown-empty">输入名称以创建或搜索</div>`;
+            }
+        } else {
+            filtered.forEach(c => {
+                const color = getClientColor(c);
+                html += `
+                    <div class="dropdown-item" onmousedown="selectClientFromDropdown('${c}')">
+                        <div class="dropdown-dot" style="background:${color}; box-shadow:0 0 8px ${color}"></div>
+                        ${c}
+                    </div>
+                `;
+            });
+        }
+        dropdown.innerHTML = html;
+        dropdown.classList.add('show');
+    }
+
+    function selectClientFromDropdown(name) {
+        const input = document.getElementById('inputClient');
+        input.value = name;
+        updateColorPreview(name);
+        document.getElementById('clientDropdown').classList.remove('show');
+    }
+
+    function openModal(editId = null, autoClient = '') {
+        document.getElementById('expenseList').innerHTML = ''; 
+        document.getElementById('editId').value = '';
+        document.getElementById('inputName').value = '';
+        document.getElementById('inputClient').value = autoClient || '';
+        document.getElementById('inputPrice').value = '';
+        document.getElementById('inputAdded').value = '';
+        document.getElementById('inputDefined').checked = true;
+        document.getElementById('modalTitle').innerText = '新建项目';
+        updateColorPreview(autoClient);
+
+        if (editId) {
+            const p = projects.find(x => x.id === editId);
+            if (p) {
+                document.getElementById('modalTitle').innerText = '编辑项目';
+                document.getElementById('editId').value = p.id;
+                document.getElementById('inputName').value = p.name;
+                document.getElementById('inputClient').value = p.client;
+                document.getElementById('inputPrice').value = p.basePrice;
+                document.getElementById('inputAdded').value = p.addedPrice;
+                document.getElementById('inputDefined').checked = p.priceDefined;
+                if (p.expenses) p.expenses.forEach(e => addExpenseRow(e.name, e.amount, e.type));
+                updateColorPreview(p.client);
+            }
+        }
+        document.getElementById('modal').classList.add('show');
+    }
+
+    function updateColorPreview(clientName) {
+        const picker = document.getElementById('inputClientColor');
+        if (!clientName) { picker.value = '#6366f1'; return; }
+        let color = clientColors[clientName];
+        if (!color || !color.startsWith('#')) { color = '#6366f1'; }
+        picker.value = color;
+    }
+
+    function addExpenseRow(name = '', amount = '', type = 'reimb') {
+        const div = document.createElement('div');
+        div.className = 'expense-item';
+        div.innerHTML = `
+            <input type="text" placeholder="费用名称" value="${name}" class="exp-name">
+            <input type="text" placeholder="金额" value="${amount}" class="exp-amount" onblur="formatInput(this)">
+            <select class="exp-type">
+                <option value="reimb" ${type==='reimb'?'selected':''}>报销 (客户付)</option>
+                <option value="cost" ${type==='cost'?'selected':''}>成本 (自费)</option>
+            </select>
+            <span class="exp-del" onclick="this.parentElement.remove()">✕</span>
+        `;
+        document.getElementById('expenseList').appendChild(div);
+    }
+    
+    function saveProject() {
+        const id = document.getElementById('editId').value;
+        const name = document.getElementById('inputName').value;
+        const client = document.getElementById('inputClient').value;
+        const pickedColor = document.getElementById('inputClientColor').value;
+        if(!name || !client) return alert('请填写项目名称和甲方');
+        
+        saveClientColor(client, pickedColor);
+
+        const expenses = [];
+        document.querySelectorAll('.expense-item').forEach(row => {
+            const n = row.querySelector('.exp-name').value;
+            const a = parseMoney(row.querySelector('.exp-amount').value);
+            const t = row.querySelector('.exp-type').value;
+            if(n && a > 0) expenses.push({ name: n, amount: a, type: t });
+        });
+        
+        const data = {
+            name, client,
+            basePrice: parseMoney(document.getElementById('inputPrice').value),
+            addedPrice: parseMoney(document.getElementById('inputAdded').value),
+            priceDefined: document.getElementById('inputDefined').checked,
+            expenses: expenses
+        };
+        
+        if (id) {
+            const idx = projects.findIndex(x => x.id == id);
+            if(idx !== -1) projects[idx] = {...projects[idx], ...data};
+        } else {
+            projects.unshift({ id: Date.now(), ...data, createdDate: getDateStr(), isDelivered: false, isPaid: false });
+        }
+        
+        document.getElementById('modal').classList.remove('show');
+        saveData();
+    }
+    
+    function quickAdd(id, type) {
+        document.getElementById('quickAddId').value = id;
+        document.getElementById('quickAddType').value = type;
+        const map = { 'added': { t: '追加报酬', c: '#34d399' }, 'reimb': { t: '添加报销/垫付', c: '#22d3ee' } };
+        document.getElementById('quickAddTitle').innerText = map[type].t;
+        document.getElementById('quickAddDesc').innerText = type==='added'?'纯收入增加':'选择预设或直接输入金额';
+        
+        const inp = document.getElementById('inputQuickAmount');
+        inp.value = ''; 
+        inp.style.color = map[type].c;
+        document.getElementById('inputQuickName').value = '';
+        
+        const tags = document.getElementById('quickAddTags');
+        const nameInp = document.getElementById('inputQuickName');
+        if (type === 'reimb') { tags.style.display = 'flex'; nameInp.style.display = 'block'; } 
+        else { tags.style.display = 'none'; nameInp.style.display = 'none'; }
+        document.getElementById('modalQuickAdd').classList.add('show');
+        setTimeout(() => inp.focus(), 100);
+    }
+
+    function setQuickVal(name) {
+        document.getElementById('inputQuickName').value = name;
+        document.getElementById('inputQuickAmount').focus();
+    }
+    
+    function confirmQuickAdd() {
+        const id = Number(document.getElementById('quickAddId').value);
+        const type = document.getElementById('quickAddType').value;
+        const amt = parseMoney(document.getElementById('inputQuickAmount').value);
+        const name = document.getElementById('inputQuickName').value;
+        if (amt > 0) {
+            const p = projects.find(x => x.id === id);
+            if (p) {
+                if(type === 'added') p.addedPrice = (Number(p.addedPrice)||0) + amt;
+                if(type === 'reimb') { p.expenses.push({ name: name || '快速报销', amount: amt, type: 'reimb' }); }
+                saveData();
+            }
+        }
+        document.getElementById('modalQuickAdd').classList.remove('show');
+    }
+
+    function exportToImage(mode) {
+        let dataToExport = [];
+        if (mode === 'selected') dataToExport = projects.filter(p => selectedIds.has(p.id));
+        else dataToExport = getFilteredProjects();
+
+        if (dataToExport.length === 0) return alert("无数据可导出");
+
+        dataToExport.sort((a, b) => {
+            const clientCompare = (a.client || '').localeCompare((b.client || ''), 'zh-CN');
+            if (clientCompare !== 0) return clientCompare;
+            return b.id - a.id; 
+        });
+
+        let grandTotal = 0;
+        let hasAdded = dataToExport.some(p => p.addedPrice > 0);
+        let hasReimb = dataToExport.some(p => p.expenses.some(e => e.type === 'reimb'));
+
+        let theadHtml = `<tr><th>项目名称 Project</th><th>甲方 Client</th><th style="text-align:right">基础费 Base</th>`;
+        if (hasAdded) theadHtml += `<th style="text-align:right">追加 Extra</th>`;
+        if (hasReimb) theadHtml += `<th style="text-align:right">差旅/报销 Reimbursement</th>`;
+        theadHtml += `<th style="text-align:right">总额 Amount</th></tr>`;
+        document.getElementById('export-thead').innerHTML = theadHtml;
+
+        const tbody = document.getElementById('export-tbody');
+        tbody.innerHTML = '';
+
+        dataToExport.forEach(p => {
+            const base = Number(p.basePrice) || 0;
+            const added = Number(p.addedPrice) || 0;
+            const reimbs = p.expenses.filter(e => e.type === 'reimb');
+            const reimbTotal = reimbs.reduce((s, e) => s + Number(e.amount), 0);
+            const total = base + added + reimbTotal;
+            grandTotal += total;
+
+            let row = `<tr>
+                <td style="font-weight:bold; color:#f1f5f9">${p.name}</td>
+                <td style="color:#cbd5e1">${p.client}</td>
+                <td style="text-align:right; font-family:monospace; color:#cbd5e1;">¥${formatCNY(base)}</td>`;
+            if (hasAdded) row += `<td style="text-align:right; color:#10b981; font-family:monospace;">${added>0 ? '+'+formatCNY(added) : '-'}</td>`;
+            if (hasReimb) {
+                let detail = reimbs.map(r => `${r.name}:¥${formatCNY(r.amount)}`).join(', ');
+                row += `<td style="text-align:right; color:#22d3ee; font-size:13px;">${detail || '-'}</td>`;
+            }
+            row += `<td style="text-align:right; font-weight:bold; font-size:18px; color:white; font-family:monospace;">¥${formatCNY(total)}</td></tr>`;
+            tbody.innerHTML += row;
+        });
+
+        document.getElementById('export-count').innerText = dataToExport.length;
+        document.getElementById('export-sum').innerText = formatCNY(grandTotal);
+
+        const container = document.getElementById('export-container');
+        html2canvas(container, { backgroundColor: "#0b1121", scale: 2 }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `森屿_结算单_${getDateStr()}.jpg`;
+            link.href = canvas.toDataURL("image/jpeg", 0.95);
+            link.click();
+        });
+    }
+
+    function selectClient(c) { 
+        selectedClient = c; 
+        setFilter('all', null); 
+        if(window.innerWidth <= 768) toggleSidebar(false);
+    }
+    
+    function batchAction(action) {
+        if(selectedIds.size === 0) return;
+        if(action === 'delete' && !confirm('确认删除选中的项目吗？')) return;
+        projects.forEach(p => {
+            if(selectedIds.has(p.id)) {
+                if(action === 'deliver') { p.isDelivered = true; p.deliveryDate = getDateStr(); }
+                if(action === 'pay') { p.isPaid = true; p.paymentDate = getDateStr(); }
+            }
+        });
+        if(action === 'delete') { projects = projects.filter(p => !selectedIds.has(p.id)); selectedIds.clear(); }
+        saveData();
+    }
+
+    function cardClick(e, id) { 
+        if(e.target.closest('button') || e.target.closest('.check-circle') || e.target.closest('.slider')) return; 
+        toggleSelect(id); 
+    }
+    
+    function toggleSelect(id) {
+        if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+        const card = document.getElementById('card-' + id);
+        if (card) {
+            if (selectedIds.has(id)) card.classList.add('selected');
+            else card.classList.remove('selected');
+        }
+        updateBatchBar();
+        updateSelectAllBtn(); 
+    }
+    
+    function clearSelection() { 
+        selectedIds.forEach(id => {
+            const card = document.getElementById('card-' + id);
+            if(card) card.classList.remove('selected');
+        });
+        selectedIds.clear(); 
+        updateBatchBar(); 
+        updateSelectAllBtn(); 
+    }
+
+    function setFilter(type, btn) {
+        currentFilter = type;
+        if(btn) { document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
+        renderProjects();
+        if(window.innerWidth <= 768) toggleSidebar(false);
+    }
+    
+    function deleteProject(id) { if(confirm('确定删除吗？')) { projects = projects.filter(x => x.id !== id); saveData(); } }
+    function editProject(id) { openModal(id); }
+    function closeModal() { document.getElementById('modal').classList.remove('show'); }
+    function saveData() { 
+        localStorage.setItem('project_v9_data', JSON.stringify(projects)); 
+        populateDateFilters(); 
+        renderProjects(); 
+    }
+    
+    function escapeHtml(t) { return t ? t.replace(/</g,"&lt;") : ''; }
+    function saveHtmlFile() {
+        let html = document.documentElement.outerHTML;
+        html = html.replace(/(var _PROJECT_DATA = )\[.*?\];/s, `$1${JSON.stringify(projects)};`);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([html], {type:'text/html'}));
+        a.download = `森屿备份_${getDateStr()}.html`;
+        a.click();
+    }
+
+    populateDateFilters();
+    renderProjects();
+</script>
+
+</body></html>
